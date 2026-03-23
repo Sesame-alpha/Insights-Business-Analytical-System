@@ -4,6 +4,7 @@
     --primary-soft: #eef4fc;
     --success: #2c7a4d;
     --warning: #e6a017;
+    --danger: #dc3545;
     --gray-light: #f8fafc;
     --border-light: #e9edf2;
 }
@@ -159,4 +160,9 @@ body {
     .card-header-custom {
         padding: 1rem;
     }
-    }
+}
+
+/* custom currency input */
+#customCurrency {
+    border-radius: 20px;
+}
