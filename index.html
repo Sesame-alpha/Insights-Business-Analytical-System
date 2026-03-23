@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsightFlow | Business Analytics DSS</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- External CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container-fluid px-4 py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 class="display-6 fw-semibold text-primary-corporate"><i class="fas fa-chart-line me-2"></i>InsightFlow</h1>
+            <p class="text-muted">Business Analytics & Decision Support System</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" id="exportCsvBtn"><i class="fas fa-download me-1"></i> Export CSV</button>
+            <button class="btn btn-outline-secondary" id="clearStorageBtn"><i class="fas fa-trash-alt me-1"></i> Clear All Data</button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-dollar-sign"></i></div>
+                <div class="stat-label">Total Sales</div>
+                <div class="stat-value" id="totalSales">$0</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-chart-simple"></i></div>
+                <div class="stat-label">Total Profit</div>
+                <div class="stat-value" id="totalProfit">$0</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-percent"></i></div>
+                <div class="stat-label">Avg. Margin</div>
+                <div class="stat-value" id="avgMargin">0%</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-trend-up"></i></div>
+                <div class="stat-label">Sales Trend</div>
+                <div class="stat-value" id="trendBadge">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart & Insights -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="dashboard-card">
+                <div class="card-header-custom">
+                    <i class="fas fa-chart-column me-2"></i> Sales & Profit Over Time
+                </div>
+                <div class="card-body">
+                    <canvas id="businessChart" height="280"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="dashboard-card insights-card">
+                <div class="card-header-custom">
+                    <i class="fas fa-lightbulb me-2"></i> AI Insights & Recommendations
+                </div>
+                <div class="card-body" id="insightsPanel">
+                    <p class="text-muted">Loading insights...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Entry & Table -->
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="dashboard-card">
+                <div class="card-header-custom">
+                    <i class="fas fa-plus-circle me-2"></i> Add / Edit Transaction
+                </div>
+                <div class="card-body">
+                    <form id="transactionForm">
+                        <input type="hidden" id="editId" value="">
+                        <div class="mb-3">
+                            <label class="form-label">Date</label>
+                            <input type="date" class="form-control" id="transDate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Product / Description</label>
+                            <input type="text" class="form-control" id="productName" placeholder="e.g., Office Chair" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Sales Amount ($)</label>
+                                <input type="number" step="0.01" class="form-control" id="salesAmount" placeholder="0.00" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Cost Amount ($)</label>
+                                <input type="number" step="0.01" class="form-control" id="costAmount" placeholder="0.00" required>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary-custom"><i class="fas fa-save me-1"></i> Save Transaction</button>
+                            <button type="button" class="btn btn-outline-secondary" id="cancelEditBtn"><i class="fas fa-times me-1"></i> Cancel</button>
+                        </div>
+                    </form>
+                    <hr class="my-4">
+                    <div class="d-flex gap-2">
+                        <label for="csvUpload" class="btn btn-outline-success w-100"><i class="fas fa-upload me-1"></i> Import CSV</label>
+                        <input type="file" id="csvUpload" accept=".csv" style="display: none;">
+                        <a href="#" id="sampleCsvLink" class="btn btn-link small">Download sample CSV</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="dashboard-card">
+                <div class="card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-table-list me-2"></i> Transaction History</span>
+                    <span class="badge bg-secondary" id="recordCount">0 records</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 420px;">
+                        <table class="table table-hover align-middle mb-0" id="dataTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Product</th>
+                                    <th>Sales ($)</th>
+                                    <th>Cost ($)</th>
+                                    <th>Profit ($)</th>
+                                    <th style="width: 80px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr><td colspan="6" class="text-center text-muted py-4">No data yet. Add a transaction or import CSV.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- External JavaScript -->
+<script src="script.js"></script>
+</body>
+  </html>
