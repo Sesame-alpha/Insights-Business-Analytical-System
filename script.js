@@ -3,9 +3,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---------- DATA MODEL ----------
     let transactions = [];       // each: { id, date, product, sales, cost, profit }
     let chartInstance = null;
+    let currentCurrency = '$';   // default currency
 
     // Helper functions
-    const formatCurrency = (val) => `$${val.toFixed(2)}`;
+    const formatCurrency = (val) => `${currentCurrency}${val.toFixed(2)}`;
     const formatPercent = (val) => `${val.toFixed(1)}%`;
     const escapeHtml = (str) => str.replace(/[&<>]/g, (m) => {
         if (m === '&') return '&amp;';
@@ -13,6 +14,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (m === '>') return '&gt;';
         return m;
     });
+
+    // Detect currency from a string like "$1,234.56" or "€123,45"
+    function detectCurrencyFromValue(value) {
+        if (typeof value !== 'string') return null;
+        const match = value.match(/^([€£¥₹$])(?:\s*)(\d[\d,.]*)/);
+        if (match) {
+            return match[1];
+        }
+        return null;
+    }
+
+    // Update the input group symbols when currency changes
+    function updateInputSymbols() {
+        const salesSymbolSpan = document.getElementById('salesCurrencySymbol');
+        const costSymbolSpan = document.getElementById('costCurrencySymbol');
+        if (salesSymbolSpan) salesSymbolSpan.innerText = currentCurrency;
+        if (costSymbolSpan) costSymbolSpan.innerText = currentCurrency;
+    }
 
     // Load from LocalStorage
     function loadFromStorage() {
@@ -29,11 +48,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: Date.now() + 5, date: '2025-03-12', product: 'Wireless Mouse', sales: 125, cost: 60, profit: 65 }
             ];
         }
+        // Load saved currency preference
+        const storedCurrency = localStorage.getItem('insightflow_currency');
+        if (storedCurrency) currentCurrency = storedCurrency;
+        document.getElementById('currencySelector').value = currentCurrency;
+        updateInputSymbols();
         renderAll();
     }
 
     function saveToStorage() {
         localStorage.setItem('insightflow_transactions', JSON.stringify(transactions));
+        localStorage.setItem('insightflow_currency', currentCurrency);
     }
 
     // Update all UI components
@@ -156,14 +181,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 labels: sortedDates,
                 datasets: [
                     {
-                        label: 'Sales ($)',
+                        label: `Sales (${currentCurrency})`,
                         data: salesData,
                         backgroundColor: 'rgba(44, 110, 143, 0.7)',
                         borderRadius: 8,
                         yAxisID: 'y'
                     },
                     {
-                        label: 'Profit ($)',
+                        label: `Profit (${currentCurrency})`,
                         data: profitData,
                         type: 'line',
                         borderColor: '#2c7a4d',
@@ -185,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     legend: { position: 'top' }
                 },
                 scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Amount ($)' } }
+                    y: { beginAtZero: true, title: { display: true, text: `Amount (${currentCurrency})` } }
                 }
             }
         });
@@ -276,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('transactionForm').reset();
     }
 
-    // Flexible CSV import
+    // Flexible CSV import with currency detection
     function importCSV(file) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -299,17 +324,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (cols.length < 4) continue;
                 const date = cols[dateIdx];
                 const product = cols[productIdx];
-                const sales = parseFloat(cols[salesIdx]);
-                const cost = parseFloat(cols[costIdx]);
-                if (date && product && !isNaN(sales) && !isNaN(cost)) {
-                    const profit = sales - cost;
-                    imported.push({ id: Date.now() + i + Math.random(), date, product, sales, cost, profit });
+                const salesRaw = cols[salesIdx];
+                const costRaw = cols[costIdx];
+                // Detect currency from raw strings
+                const salesCurrency = detectCurrencyFromValue(salesRaw);
+                const costCurrency = detectCurrencyFromValue(costRaw);
+                if (salesCurrency && currentCurrency === '$') {
+                    currentCurrency = salesCurrency;
+                    document.getElementById('currencySelector').value = currentCurrency;
+                    updateInputSymbols();
+                } else if (costCurrency && currentCurrency === '$') {
+                    currentCurrency = costCurrency;
+                    document.getElementById('currencySelector').value = currentCurrency;
+                    updateInputSymbols();
+                }
+                // Remove non-numeric characters (except minus and dot) for parsing
+                const salesNum = parseFloat(salesRaw.replace(/[^0-9.-]/g, ''));
+                const costNum = parseFloat(costRaw.replace(/[^0-9.-]/g, ''));
+                if (date && product && !isNaN(salesNum) && !isNaN(costNum)) {
+                    const profit = salesNum - costNum;
+                    imported.push({ id: Date.now() + i + Math.random(), date, product, sales: salesNum, cost: costNum, profit });
                 }
             }
             if (imported.length) {
                 transactions.push(...imported);
                 renderAll();
-                alert(`Successfully imported ${imported.length} records.`);
+                alert(`Successfully imported ${imported.length} records. Currency detected: ${currentCurrency}`);
             } else {
                 alert("No valid records found in CSV.");
             }
@@ -317,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     }
 
-    // Excel import using SheetJS
+    // Excel import using SheetJS with currency detection
     function importExcel(file) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -342,66 +382,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (row.length < 4) continue;
                 const date = row[dateIdx] ? String(row[dateIdx]).trim() : "";
                 const product = row[productIdx] ? String(row[productIdx]).trim() : "";
-                const sales = parseFloat(row[salesIdx]);
-                const cost = parseFloat(row[costIdx]);
-                if (date && product && !isNaN(sales) && !isNaN(cost)) {
-                    const profit = sales - cost;
-                    imported.push({ id: Date.now() + i + Math.random(), date, product, sales, cost, profit });
+                const salesRaw = row[salesIdx] ? String(row[salesIdx]) : "";
+                const costRaw = row[costIdx] ? String(row[costIdx]) : "";
+                // Detect currency
+                const salesCurrency = detectCurrencyFromValue(salesRaw);
+                const costCurrency = detectCurrencyFromValue(costRaw);
+                if (salesCurrency && currentCurrency === '$') {
+                    currentCurrency = salesCurrency;
+                    document.getElementById('currencySelector').value = currentCurrency;
+                    updateInputSymbols();
+                } else if (costCurrency && currentCurrency === '$') {
+                    currentCurrency = costCurrency;
+                    document.getElementById('currencySelector').value = currentCurrency;
+                    updateInputSymbols();
                 }
-            }
-            if (imported.length) {
-                transactions.push(...imported);
-                renderAll();
-                alert(`Successfully imported ${imported.length} records.`);
-            } else {
-                alert("No valid records found in Excel file.");
-            }
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
-    // Export CSV
-    function exportCSV() {
-        if (transactions.length === 0) { alert("No data to export."); return; }
-        const headers = ["Date", "Product", "Sales", "Cost", "Profit"];
-        const rows = transactions.map(t => [t.date, t.product, t.sales, t.cost, t.profit]);
-        const csvContent = [headers, ...rows].map(row => row.join(",")).join("\n");
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `insightflow_export_${new Date().toISOString().slice(0,10)}.csv`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-    }
-
-    function clearAllData() {
-        if (confirm("⚠️ This will delete ALL transactions. This action cannot be undone. Continue?")) {
-            transactions = [];
-            resetForm();
-            renderAll();
-        }
-    }
-
-    function downloadSampleCSV() {
-        const sample = [["Date","Product","Sales","Cost"],["2025-04-01","Wireless Keyboard",89.99,45.00],["2025-04-05","USB Hub",35.50,20.00]];
-        const csv = sample.map(row => row.join(",")).join("\n");
-        const blob = new Blob([csv], { type: "text/csv" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "sample_business_data.csv";
-        link.click();
-        URL.revokeObjectURL(link.href);
-    }
-
-    // Attach event listeners
-    document.getElementById('transactionForm').addEventListener('submit', addOrUpdateTransaction);
-    document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
-    document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
-    document.getElementById('clearStorageBtn').addEventListener('click', clearAllData);
-    document.getElementById('csvUpload').addEventListener('change', (e) => { if(e.target.files.length) importCSV(e.target.files[0]); e.target.value=''; });
-    document.getElementById('excelUpload').addEventListener('change', (e) => { if(e.target.files.length) importExcel(e.target.files[0]); e.target.value=''; });
-    document.getElementById('sampleCsvLink').addEventListener('click', (e) => { e.preventDefault(); downloadSampleCSV(); });
-
-    // Initialize
-    loadFromStorage();
-});
+                const salesNum = parseFloat(salesRaw.replace(/[^0-9.-]/g, ''));
+                const costNum = parseFloat(costRaw.replace(/[^0-9
