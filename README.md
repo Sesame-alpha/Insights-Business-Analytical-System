@@ -1,8 +1,6 @@
-
 # InsightFlow – Business Analytics & Decision Support System
 
 A lightweight, fully client-side Business Analytics Dashboard that helps you track sales, calculate profits, visualize trends, and generate data‑driven insights—all without any server, database, or account setup.
-
 
 Features
 
@@ -14,13 +12,12 @@ Features
   - Top‑performing product
   - Number of profitable vs. loss-making transactions
   - Smart recommendations based on margin thresholds
-- **CSV Import/Export** – Upload any CSV file with flexible column detection, or export your current data to CSV for external use.
+- **CSV & Excel Import/Export** – Upload CSV or Excel files (`.xlsx`, `.xls`) with **flexible column detection**. Columns containing *date, product, sales, cost* are auto‑identified—no need to match exact headers.
 - **LocalStorage Persistence** – All data is saved automatically in your browser. Close and reopen—everything remains.
-- **Responsive Design** – Works seamlessly on desktops, tablets, and smartphones (Bootstrap 5 + custom CSS).
+- **Responsive Design** – Works seamlessly on desktops, tablets, and smartphones.
 - **No Backend, No Installation** – Just open the HTML file in a modern browser and start using it immediately.
 
 Tech Stack
-
 - **HTML5** – Structure and semantic markup
 - **CSS3** – External custom styling (clean corporate look)
 - **Bootstrap 5** – Responsive grid and components
