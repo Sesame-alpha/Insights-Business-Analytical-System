@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stored) {
             transactions = JSON.parse(stored);
         } else {
-            // Default demo data
+            // Default demo data – shows immediately when no data exists
             transactions = [
                 { id: Date.now() + 1, date: '2025-02-01', product: 'Ergonomic Chair', sales: 450, cost: 280, profit: 170 },
                 { id: Date.now() + 2, date: '2025-02-10', product: 'Standing Desk', sales: 890, cost: 510, profit: 380 },
@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTable() {
         const tbody = document.getElementById('tableBody');
         if (transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data yet. Add a transaction or import CSV.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data yet. Add a transaction or import CSV/Excel.</td></tr>';
             return;
         }
         let html = '';
@@ -276,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('transactionForm').reset();
     }
 
-    // CSV Import
+    // Flexible CSV import
     function importCSV(file) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -284,12 +284,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = text.split(/\r?\n/).filter(r => r.trim().length > 0);
             if (rows.length < 2) { alert("CSV must have header row and data."); return; }
             const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+            // Detect column indices by keywords
             const dateIdx = headers.findIndex(h => h.includes('date'));
-            const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('name'));
-            const salesIdx = headers.findIndex(h => h.includes('sales') || h.includes('revenue'));
-            const costIdx = headers.findIndex(h => h.includes('cost') || h.includes('cogs'));
+            const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('name') || h.includes('description'));
+            const salesIdx = headers.findIndex(h => h.includes('sales') || h.includes('revenue') || h.includes('amount'));
+            const costIdx = headers.findIndex(h => h.includes('cost') || h.includes('cogs') || h.includes('expense'));
             if (dateIdx === -1 || productIdx === -1 || salesIdx === -1 || costIdx === -1) {
-                alert("CSV must have columns: Date, Product, Sales, Cost (case insensitive).");
+                alert("Could not detect required columns. Make sure your file contains columns like: Date, Product, Sales, Cost.");
                 return;
             }
             let imported = [];
@@ -314,6 +315,49 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
         reader.readAsText(file);
+    }
+
+    // Excel import using SheetJS
+    function importExcel(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
+            if (!rows || rows.length < 2) { alert("Excel file has no data rows."); return; }
+            const headers = rows[0].map(h => String(h).trim().toLowerCase());
+            // Detect columns by keywords
+            const dateIdx = headers.findIndex(h => h.includes('date'));
+            const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('name') || h.includes('description'));
+            const salesIdx = headers.findIndex(h => h.includes('sales') || h.includes('revenue') || h.includes('amount'));
+            const costIdx = headers.findIndex(h => h.includes('cost') || h.includes('cogs') || h.includes('expense'));
+            if (dateIdx === -1 || productIdx === -1 || salesIdx === -1 || costIdx === -1) {
+                alert("Could not detect required columns. Make sure your Excel file contains columns like: Date, Product, Sales, Cost.");
+                return;
+            }
+            let imported = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (row.length < 4) continue;
+                const date = row[dateIdx] ? String(row[dateIdx]).trim() : "";
+                const product = row[productIdx] ? String(row[productIdx]).trim() : "";
+                const sales = parseFloat(row[salesIdx]);
+                const cost = parseFloat(row[costIdx]);
+                if (date && product && !isNaN(sales) && !isNaN(cost)) {
+                    const profit = sales - cost;
+                    imported.push({ id: Date.now() + i + Math.random(), date, product, sales, cost, profit });
+                }
+            }
+            if (imported.length) {
+                transactions.push(...imported);
+                renderAll();
+                alert(`Successfully imported ${imported.length} records.`);
+            } else {
+                alert("No valid records found in Excel file.");
+            }
+        };
+        reader.readAsArrayBuffer(file);
     }
 
     // Export CSV
@@ -355,6 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('exportCsvBtn').addEventListener('click', exportCSV);
     document.getElementById('clearStorageBtn').addEventListener('click', clearAllData);
     document.getElementById('csvUpload').addEventListener('change', (e) => { if(e.target.files.length) importCSV(e.target.files[0]); e.target.value=''; });
+    document.getElementById('excelUpload').addEventListener('change', (e) => { if(e.target.files.length) importExcel(e.target.files[0]); e.target.value=''; });
     document.getElementById('sampleCsvLink').addEventListener('click', (e) => { e.preventDefault(); downloadSampleCSV(); });
 
     // Initialize
