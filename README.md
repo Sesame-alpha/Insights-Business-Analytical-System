@@ -19,7 +19,7 @@ Features
 - **Responsive Design** – Works seamlessly on desktops, tablets, and smartphones (Bootstrap 5 + custom CSS).
 - **No Backend, No Installation** – Just open the HTML file in a modern browser and start using it immediately.
 
-## 🛠️ Tech Stack
+Tech Stack
 
 - **HTML5** – Structure and semantic markup
 - **CSS3** – External custom styling (clean corporate look)
@@ -28,22 +28,7 @@ Features
 - **Chart.js** – Interactive sales & profit visualization
 - **Font Awesome** – Icon set for better CSV
 
-CCSV Format
-
-When importing a CSV, the system automatically detects columns containing:
-
-- **Date** – any column with "date" in the name  
-- **Product** – any column with "product", "item", or "name"  
-- **Sales** – any column with "sales" or "revenue"  
-- **Cost** – any column with "cost" or "cogs"
-
-All other columns are ignored. A sample CSV can be downloaded directly from the dashboard.
-
-## 🔒 Data Privacy
-
-All data stays **only in your browser’s LocalStorage**. No data is sent to any server. You are in full control.
-
-## 📄 License
+License
 
 This project is open source and free to use for personal or commercial purposes.
 
