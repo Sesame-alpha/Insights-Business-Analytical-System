@@ -1,12 +1,18 @@
-// Wait for DOM and Chart.js to be ready
 document.addEventListener('DOMContentLoaded', () => {
-    // ---------- DATA MODEL ----------
-    let transactions = [];       // each: { id, date, product, sales, cost, profit }
+    // ---------- DATA ----------
+    let transactions = [];           // master data
+    let filteredTransactions = [];    // filtered by date range
     let chartInstance = null;
-    let currentCurrency = '$';   // default currency
+    let currentCurrency = '$';
+    let customCurrencySymbol = '';
+    let startDateFilter = '';
+    let endDateFilter = '';
 
     // Helper functions
-    const formatCurrency = (val) => `${currentCurrency}${val.toFixed(2)}`;
+    const formatCurrency = (val) => {
+        const symbol = customCurrencySymbol || currentCurrency;
+        return `${symbol}${val.toFixed(2)}`;
+    };
     const formatPercent = (val) => `${val.toFixed(1)}%`;
     const escapeHtml = (str) => str.replace(/[&<>]/g, (m) => {
         if (m === '&') return '&amp;';
@@ -15,31 +21,34 @@ document.addEventListener('DOMContentLoaded', () => {
         return m;
     });
 
-    // Detect currency from a string like "$1,234.56" or "€123,45"
+    // Detect currency from string (supports any Unicode symbol at start or end)
     function detectCurrencyFromValue(value) {
         if (typeof value !== 'string') return null;
-        const match = value.match(/^([€£¥₹$])(?:\s*)(\d[\d,.]*)/);
-        if (match) {
-            return match[1];
-        }
+        // Try to find a currency symbol at the beginning or end
+        const match = value.match(/^([€£¥₹₽₩₺R$C\$A\$USD$€£¥₹₽₩₺R$C\$A\$])(?:\s*)(\d[\d,.]*)/);
+        if (match) return match[1];
+        // Common symbols not captured by above (like ₿)
+        const customMatch = value.match(/^([^0-9\s.,]+)(?:\s*)(\d)/);
+        if (customMatch) return customMatch[1];
         return null;
     }
 
-    // Update the input group symbols when currency changes
+    // Update input group symbols
     function updateInputSymbols() {
-        const salesSymbolSpan = document.getElementById('salesCurrencySymbol');
-        const costSymbolSpan = document.getElementById('costCurrencySymbol');
-        if (salesSymbolSpan) salesSymbolSpan.innerText = currentCurrency;
-        if (costSymbolSpan) costSymbolSpan.innerText = currentCurrency;
+        const symbol = customCurrencySymbol || currentCurrency;
+        const salesSpan = document.getElementById('salesCurrencySymbol');
+        const costSpan = document.getElementById('costCurrencySymbol');
+        if (salesSpan) salesSpan.innerText = symbol;
+        if (costSpan) costSpan.innerText = symbol;
     }
 
-    // Load from LocalStorage
+    // Load data from localStorage
     function loadFromStorage() {
         const stored = localStorage.getItem('insightflow_transactions');
         if (stored) {
             transactions = JSON.parse(stored);
         } else {
-            // Default demo data – shows immediately when no data exists
+            // Default demo data
             transactions = [
                 { id: Date.now() + 1, date: '2025-02-01', product: 'Ergonomic Chair', sales: 450, cost: 280, profit: 170 },
                 { id: Date.now() + 2, date: '2025-02-10', product: 'Standing Desk', sales: 890, cost: 510, profit: 380 },
@@ -48,32 +57,70 @@ document.addEventListener('DOMContentLoaded', () => {
                 { id: Date.now() + 5, date: '2025-03-12', product: 'Wireless Mouse', sales: 125, cost: 60, profit: 65 }
             ];
         }
-        // Load saved currency preference
+        // Load currency preference
         const storedCurrency = localStorage.getItem('insightflow_currency');
-        if (storedCurrency) currentCurrency = storedCurrency;
-        document.getElementById('currencySelector').value = currentCurrency;
+        if (storedCurrency) {
+            if (storedCurrency === 'custom') {
+                currentCurrency = '';
+                customCurrencySymbol = localStorage.getItem('insightflow_custom_currency') || '$';
+                document.getElementById('currencySelector').value = 'custom';
+                document.getElementById('customCurrency').style.display = 'block';
+                document.getElementById('customCurrency').value = customCurrencySymbol;
+            } else {
+                currentCurrency = storedCurrency;
+                document.getElementById('currencySelector').value = storedCurrency;
+                document.getElementById('customCurrency').style.display = 'none';
+            }
+        }
+        // Load filters
+        const storedStart = localStorage.getItem('insightflow_filter_start');
+        const storedEnd = localStorage.getItem('insightflow_filter_end');
+        if (storedStart) startDateFilter = storedStart;
+        if (storedEnd) endDateFilter = storedEnd;
+        document.getElementById('filterStartDate').value = startDateFilter;
+        document.getElementById('filterEndDate').value = endDateFilter;
+
         updateInputSymbols();
-        renderAll();
+        applyFilter();
     }
 
     function saveToStorage() {
         localStorage.setItem('insightflow_transactions', JSON.stringify(transactions));
-        localStorage.setItem('insightflow_currency', currentCurrency);
+        localStorage.setItem('insightflow_currency', currentCurrency || 'custom');
+        if (currentCurrency === 'custom') {
+            localStorage.setItem('insightflow_custom_currency', customCurrencySymbol);
+        }
+        localStorage.setItem('insightflow_filter_start', startDateFilter);
+        localStorage.setItem('insightflow_filter_end', endDateFilter);
     }
 
-    // Update all UI components
+    // Filter transactions by date range
+    function applyFilter() {
+        let filtered = [...transactions];
+        if (startDateFilter) {
+            filtered = filtered.filter(t => t.date >= startDateFilter);
+        }
+        if (endDateFilter) {
+            filtered = filtered.filter(t => t.date <= endDateFilter);
+        }
+        filteredTransactions = filtered;
+        renderAll();
+    }
+
+    // Main render function
     function renderAll() {
         updateStatsAndTrend();
         updateTable();
         updateChart();
         generateInsights();
+        generateSummary();
         saveToStorage();
-        document.getElementById('recordCount').innerText = transactions.length + ' records';
+        document.getElementById('recordCount').innerText = filteredTransactions.length + ' records';
     }
 
-    // KPI and trend detection
+    // KPI and trend using filtered data
     function updateStatsAndTrend() {
-        if (transactions.length === 0) {
+        if (filteredTransactions.length === 0) {
             document.getElementById('totalSales').innerText = formatCurrency(0);
             document.getElementById('totalProfit').innerText = formatCurrency(0);
             document.getElementById('avgMargin').innerText = formatPercent(0);
@@ -81,18 +128,18 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         let totalSales = 0, totalProfit = 0, totalMarginSum = 0;
-        transactions.forEach(t => {
+        filteredTransactions.forEach(t => {
             totalSales += t.sales;
             totalProfit += t.profit;
             totalMarginSum += (t.sales > 0 ? (t.profit / t.sales) * 100 : 0);
         });
-        const avgMargin = transactions.length ? totalMarginSum / transactions.length : 0;
+        const avgMargin = filteredTransactions.length ? totalMarginSum / filteredTransactions.length : 0;
         document.getElementById('totalSales').innerText = formatCurrency(totalSales);
         document.getElementById('totalProfit').innerText = formatCurrency(totalProfit);
         document.getElementById('avgMargin').innerText = formatPercent(avgMargin);
 
-        // Trend detection: linear regression on sales by date order
-        const sorted = [...transactions].sort((a,b) => new Date(a.date) - new Date(b.date));
+        // Trend detection on filtered data
+        const sorted = [...filteredTransactions].sort((a,b) => new Date(a.date) - new Date(b.date));
         if (sorted.length < 2) {
             document.getElementById('trendBadge').innerHTML = '<span class="badge bg-info">Insufficient data</span>';
             return;
@@ -120,15 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('trendBadge').innerHTML = trendHtml;
     }
 
-    // Render transaction table
+    // Table render using filtered data
     function updateTable() {
         const tbody = document.getElementById('tableBody');
-        if (transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data yet. Add a transaction or import CSV/Excel.</td></tr>';
+        if (filteredTransactions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data in selected range. Add transactions or adjust filters.</td></tr>';
             return;
         }
         let html = '';
-        transactions.forEach(t => {
+        filteredTransactions.forEach(t => {
             html += `<tr>
                         <td>${t.date}</td>
                         <td>${escapeHtml(t.product)}</td>
@@ -142,26 +189,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     </tr>`;
         });
         tbody.innerHTML = html;
-        // Attach edit/delete events
         document.querySelectorAll('.edit-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = parseInt(btn.dataset.id);
-                editTransaction(id);
-            });
+            btn.addEventListener('click', () => editTransaction(parseInt(btn.dataset.id)));
         });
         document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = parseInt(btn.dataset.id);
-                deleteTransaction(id);
-            });
+            btn.addEventListener('click', () => deleteTransaction(parseInt(btn.dataset.id)));
         });
     }
 
-    // Chart.js update
+    // Chart using filtered data
     function updateChart() {
         const ctx = document.getElementById('businessChart').getContext('2d');
         const dateMap = new Map();
-        transactions.forEach(t => {
+        filteredTransactions.forEach(t => {
             const date = t.date;
             if (!dateMap.has(date)) {
                 dateMap.set(date, { sales: 0, profit: 0 });
@@ -181,14 +221,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 labels: sortedDates,
                 datasets: [
                     {
-                        label: `Sales (${currentCurrency})`,
+                        label: `Sales (${customCurrencySymbol || currentCurrency})`,
                         data: salesData,
                         backgroundColor: 'rgba(44, 110, 143, 0.7)',
                         borderRadius: 8,
                         yAxisID: 'y'
                     },
                     {
-                        label: `Profit (${currentCurrency})`,
+                        label: `Profit (${customCurrencySymbol || currentCurrency})`,
                         data: profitData,
                         type: 'line',
                         borderColor: '#2c7a4d',
@@ -210,48 +250,103 @@ document.addEventListener('DOMContentLoaded', () => {
                     legend: { position: 'top' }
                 },
                 scales: {
-                    y: { beginAtZero: true, title: { display: true, text: `Amount (${currentCurrency})` } }
+                    y: { beginAtZero: true, title: { display: true, text: `Amount (${customCurrencySymbol || currentCurrency})` } }
                 }
             }
         });
     }
 
-    // Generate insights
+    // Insights using filtered data
     function generateInsights() {
-        const insightsDiv = document.getElementById('insightsPanel');
-        if (transactions.length === 0) {
-            insightsDiv.innerHTML = '<div class="alert alert-secondary">No transactions to analyze. Add data for smart insights.</div>';
+        const div = document.getElementById('insightsPanel');
+        if (filteredTransactions.length === 0) {
+            div.innerHTML = '<div class="alert alert-secondary">No data in selected range.</div>';
             return;
         }
         let totalSales = 0, totalProfit = 0, totalMargin = 0;
-        transactions.forEach(t => {
+        filteredTransactions.forEach(t => {
             totalSales += t.sales;
             totalProfit += t.profit;
             totalMargin += (t.sales > 0 ? (t.profit / t.sales) * 100 : 0);
         });
-        const avgMargin = totalMargin / transactions.length;
-        const profitableTransactions = transactions.filter(t => t.profit > 0).length;
-        const lossTransactions = transactions.filter(t => t.profit <= 0).length;
-        
+        const avgMargin = totalMargin / filteredTransactions.length;
+        const profitable = filteredTransactions.filter(t => t.profit > 0).length;
+        const loss = filteredTransactions.filter(t => t.profit <= 0).length;
         let topProduct = null, maxProfit = -Infinity;
-        transactions.forEach(t => {
+        filteredTransactions.forEach(t => {
             if (t.profit > maxProfit) { maxProfit = t.profit; topProduct = t.product; }
         });
-        let insightsHtml = `<ul class="list-unstyled mb-0">
+        let html = `<ul class="list-unstyled mb-0">
             <li class="mb-2"><i class="fas fa-chart-line text-primary me-2"></i> <strong>Profitability:</strong> Total profit <strong>${formatCurrency(totalProfit)}</strong> on ${formatCurrency(totalSales)} sales.</li>
             <li class="mb-2"><i class="fas fa-percent text-info me-2"></i> <strong>Avg Margin:</strong> ${formatPercent(avgMargin)} – ${avgMargin > 25 ? 'Excellent' : avgMargin > 10 ? 'Healthy' : 'Needs improvement'}.</li>
             <li class="mb-2"><i class="fas fa-star text-warning me-2"></i> <strong>Top Performer:</strong> "${escapeHtml(topProduct)}" with profit ${formatCurrency(maxProfit)}.</li>
-            <li class="mb-2"><i class="fas fa-chart-simple me-2"></i> <strong>Transactions:</strong> ${profitableTransactions} profitable, ${lossTransactions} with loss.</li>`;
-        if (transactions.length >= 3) {
-            insightsHtml += `<li class="mb-2"><i class="fas fa-trend-up me-2"></i> <strong>Recommendation:</strong> Based on recent data, focus on high-margin products and monitor cost structure.</li>`;
+            <li class="mb-2"><i class="fas fa-chart-simple me-2"></i> <strong>Transactions:</strong> ${profitable} profitable, ${loss} with loss.</li>`;
+        if (filteredTransactions.length >= 3) {
+            html += `<li class="mb-2"><i class="fas fa-trend-up me-2"></i> <strong>Recommendation:</strong> Focus on high-margin products.</li>`;
         } else {
-            insightsHtml += `<li class="mb-2"><i class="fas fa-database me-2"></i> Add more records to unlock trend predictions.</li>`;
+            html += `<li class="mb-2"><i class="fas fa-database me-2"></i> Add more records for deeper insights.</li>`;
         }
-        insightsHtml += `</ul>`;
-        insightsDiv.innerHTML = insightsHtml;
+        html += `</ul>`;
+        div.innerHTML = html;
     }
 
-    // CRUD operations
+    // Executive summary using filtered data
+    function generateSummary() {
+        const div = document.getElementById('summaryPanel');
+        if (filteredTransactions.length === 0) {
+            div.innerHTML = '<div class="alert alert-secondary">No data to summarize.</div>';
+            return;
+        }
+        // Top 3 products by profit
+        const products = [...filteredTransactions];
+        const productProfit = {};
+        products.forEach(p => {
+            if (!productProfit[p.product]) productProfit[p.product] = 0;
+            productProfit[p.product] += p.profit;
+        });
+        const sortedProducts = Object.entries(productProfit).sort((a,b) => b[1] - a[1]);
+        const top3 = sortedProducts.slice(0,3);
+        // Bottom 3 by profit
+        const bottom3 = sortedProducts.slice(-3).reverse();
+        // Average profit per transaction
+        const avgProfit = products.reduce((sum, p) => sum + p.profit, 0) / products.length;
+
+        let html = `<div class="row">
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-chart-line me-1"></i> Key Metrics</h6>
+                        <p class="mb-1">Total Records: <strong>${filteredTransactions.length}</strong></p>
+                        <p class="mb-1">Avg Profit/Transaction: <strong>${formatCurrency(avgProfit)}</strong></p>
+                        <p class="mb-1">Profit Margin: <strong>${formatPercent((products.reduce((s,p)=>s+p.profit,0) / products.reduce((s,p)=>s+p.sales,0))*100)}</strong></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-trophy me-1"></i> Top 3 Products (by Profit)</h6>
+                        <ol class="small mb-0">
+                            ${top3.map(([name, profit]) => `<li>${escapeHtml(name)}: ${formatCurrency(profit)}</li>`).join('')}
+                        </ol>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="fas fa-chart-simple me-1"></i> Bottom 3 Products (by Profit)</h6>
+                        <ol class="small mb-0">
+                            ${bottom3.map(([name, profit]) => `<li>${escapeHtml(name)}: ${formatCurrency(profit)}</li>`).join('')}
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+        div.innerHTML = html;
+    }
+
+    // CRUD operations (operate on master data, then reapply filter)
     function addOrUpdateTransaction(event) {
         event.preventDefault();
         const idField = document.getElementById('editId').value;
@@ -266,15 +361,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const profit = sales - cost;
         if (idField) {
             const idx = transactions.findIndex(t => t.id == idField);
-            if (idx !== -1) {
-                transactions[idx] = { ...transactions[idx], date, product, sales, cost, profit };
-            }
+            if (idx !== -1) transactions[idx] = { ...transactions[idx], date, product, sales, cost, profit };
         } else {
-            const newId = Date.now();
-            transactions.push({ id: newId, date, product, sales, cost, profit });
+            transactions.push({ id: Date.now(), date, product, sales, cost, profit });
         }
         resetForm();
-        renderAll();
+        applyFilter(); // re-filter and render
     }
 
     function editTransaction(id) {
@@ -292,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('Delete this transaction permanently?')) {
             transactions = transactions.filter(t => t.id !== id);
             resetForm();
-            renderAll();
+            applyFilter();
         }
     }
 
@@ -301,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('transactionForm').reset();
     }
 
-    // Flexible CSV import with currency detection
+    // CSV Import with currency detection
     function importCSV(file) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -309,92 +401,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = text.split(/\r?\n/).filter(r => r.trim().length > 0);
             if (rows.length < 2) { alert("CSV must have header row and data."); return; }
             const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
-            // Detect column indices by keywords
             const dateIdx = headers.findIndex(h => h.includes('date'));
             const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('name') || h.includes('description'));
             const salesIdx = headers.findIndex(h => h.includes('sales') || h.includes('revenue') || h.includes('amount'));
             const costIdx = headers.findIndex(h => h.includes('cost') || h.includes('cogs') || h.includes('expense'));
             if (dateIdx === -1 || productIdx === -1 || salesIdx === -1 || costIdx === -1) {
-                alert("Could not detect required columns. Make sure your file contains columns like: Date, Product, Sales, Cost.");
+                alert("Could not detect required columns. Columns must contain: Date, Product, Sales, Cost.");
                 return;
             }
             let imported = [];
-            for (let i = 1; i < rows.length; i++) {
-                const cols = rows[i].split(',').map(c => c.trim());
-                if (cols.length < 4) continue;
-                const date = cols[dateIdx];
-                const product = cols[productIdx];
-                const salesRaw = cols[salesIdx];
-                const costRaw = cols[costIdx];
-                // Detect currency from raw strings
-                const salesCurrency = detectCurrencyFromValue(salesRaw);
-                const costCurrency = detectCurrencyFromValue(costRaw);
-                if (salesCurrency && currentCurrency === '$') {
-                    currentCurrency = salesCurrency;
-                    document.getElementById('currencySelector').value = currentCurrency;
-                    updateInputSymbols();
-                } else if (costCurrency && currentCurrency === '$') {
-                    currentCurrency = costCurrency;
-                    document.getElementById('currencySelector').value = currentCurrency;
-                    updateInputSymbols();
-                }
-                // Remove non-numeric characters (except minus and dot) for parsing
-                const salesNum = parseFloat(salesRaw.replace(/[^0-9.-]/g, ''));
-                const costNum = parseFloat(costRaw.replace(/[^0-9.-]/g, ''));
-                if (date && product && !isNaN(salesNum) && !isNaN(costNum)) {
-                    const profit = salesNum - costNum;
-                    imported.push({ id: Date.now() + i + Math.random(), date, product, sales: salesNum, cost: costNum, profit });
-                }
-            }
-            if (imported.length) {
-                transactions.push(...imported);
-                renderAll();
-                alert(`Successfully imported ${imported.length} records. Currency detected: ${currentCurrency}`);
-            } else {
-                alert("No valid records found in CSV.");
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    // Excel import using SheetJS with currency detection
-    function importExcel(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
-            if (!rows || rows.length < 2) { alert("Excel file has no data rows."); return; }
-            const headers = rows[0].map(h => String(h).trim().toLowerCase());
-            // Detect columns by keywords
-            const dateIdx = headers.findIndex(h => h.includes('date'));
-            const productIdx = headers.findIndex(h => h.includes('product') || h.includes('item') || h.includes('name') || h.includes('description'));
-            const salesIdx = headers.findIndex(h => h.includes('sales') || h.includes('revenue') || h.includes('amount'));
-            const costIdx = headers.findIndex(h => h.includes('cost') || h.includes('cogs') || h.includes('expense'));
-            if (dateIdx === -1 || productIdx === -1 || salesIdx === -1 || costIdx === -1) {
-                alert("Could not detect required columns. Make sure your Excel file contains columns like: Date, Product, Sales, Cost.");
-                return;
-            }
-            let imported = [];
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (row.length < 4) continue;
-                const date = row[dateIdx] ? String(row[dateIdx]).trim() : "";
-                const product = row[productIdx] ? String(row[productIdx]).trim() : "";
-                const salesRaw = row[salesIdx] ? String(row[salesIdx]) : "";
-                const costRaw = row[costIdx] ? String(row[costIdx]) : "";
-                // Detect currency
-                const salesCurrency = detectCurrencyFromValue(salesRaw);
-                const costCurrency = detectCurrencyFromValue(costRaw);
-                if (salesCurrency && currentCurrency === '$') {
-                    currentCurrency = salesCurrency;
-                    document.getElementById('currencySelector').value = currentCurrency;
-                    updateInputSymbols();
-                } else if (costCurrency && currentCurrency === '$') {
-                    currentCurrency = costCurrency;
-                    document.getElementById('currencySelector').value = currentCurrency;
-                    updateInputSymbols();
-                }
-                const salesNum = parseFloat(salesRaw.replace(/[^0-9.-]/g, ''));
-                const costNum = parseFloat(costRaw.replace(/[^0-9
+   
