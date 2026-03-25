@@ -1,6 +1,6 @@
-Insights Business Analytical System
+powerfulures Business Analytical System
 
-Business Intelligence Decision Support Featuresures
+Business Intelligence Decision Support Features
 
 A powerful, client‑side business analytics dashboard that helps you track sales, calculate profits, visualize trends, and generate actionable insights—all without any server, database, or account setup
 
